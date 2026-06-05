@@ -251,14 +251,8 @@ Specification
 
 ## Author
 
-**[Your Name]**  
+**Bui Huu Phat**  
 Electronics and Telecommunications, University of Science, VNU-HCM  
 Focus: IC Design Verification  
-Contact: [your email]  
-GitHub: [your github]
 
 ---
-
-## License
-
-MIT License — free to use, study, and extend.
