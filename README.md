@@ -155,21 +155,21 @@ Failed          : 0
 ## Verification Methodology
 
 ```
-Specification
-     │
-     ▼
-┌─────────────────┐     Written BEFORE any code
-│ Verification    │     Documents: what to test, how to test it,
-│ Plan (VPlan)    │     and what "done" means.
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐     Independent implementation of the spec.
-│  Golden Model   │     Never derived from RTL — otherwise you
-│  (Reference)    │     replicate bugs instead of catching them.
-└────────┬────────┘
-         │
-    ┌────┴────────────────────┐
+           Specification
+                 │
+                 ▼
+        ┌─────────────────┐     Written BEFORE any code
+        │ Verification    │     Documents: what to test, how to test it,
+        │ Plan (VPlan)    │     and what "done" means.
+        └────────┬────────┘
+                 │
+                 ▼
+        ┌─────────────────┐     Independent implementation of the spec.
+        │  Golden Model   │     Never derived from RTL — otherwise you
+        │  (Reference)    │     replicate bugs instead of catching them.
+        └────────┬────────┘
+                 │
+    ┌────────────┴────────────┐
     │                         │
     ▼                         ▼
 ┌──────────┐          ┌──────────────┐
