@@ -249,6 +249,14 @@ Failed          : 0
 
 ---
 
+## What I Learned
+
+Through this project, I learned how a Design Verification workflow is structured beyond writing a simple testbench. I practiced writing a verification plan before coding, creating directed tests from expected corner cases, building an independent golden model, comparing DUT outputs automatically with a self checking scoreboard, and using assertions to detect incorrect behavior during simulation.
+
+I also learned that randomized testing alone is not enough. Even with 10,000 random vectors, directed tests are still important for explicitly checking corner cases such as carry out, borrow, signed overflow, zero result, and shift behavior.
+
+This project helped me understand the difference between simply simulating a design and building a reusable verification environment.
+
 ## Author
 
 **Bui Huu Phat**  
