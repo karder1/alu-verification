@@ -176,24 +176,24 @@ Failed          : 0
 │ Directed │          │  Randomized  │
 │  Tests   │          │    Tests     │
 │ (26 vec) │          │ (10K vectors)│
-└────┬─────┘          └──────┬───────┘
+└────┬─────┘          └───────┬──────┘
      │                        │
-     └──────────┬─────────────┘
-                │
-                ▼
+     └───────────┬────────────┘
+                 │
+                 ▼
     ┌───────────────────────┐
     │  Self-Checking        │
     │  Scoreboard           │  DUT output vs Golden Model
     │  (auto PASS/FAIL)     │  every single vector
-    └───────────┬───────────┘
-                │
-                ▼
+    └────────────┬──────────┘
+                 │
+                 ▼
     ┌───────────────────────┐
     │  Assertion Checker    │  Always-on property monitors
     │  (alu_sva.sv)         │  Fire immediately on violation
-    └───────────┬───────────┘
-                │
-                ▼
+    └────────────┬──────────┘
+                 │
+                 ▼
     ┌───────────────────────┐
     │  Coverage Closure     │  Have we tested the RIGHT things?
     │  (14 coverpoints)     │  Drives test addition if bins MISS
