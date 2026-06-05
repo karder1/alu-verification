@@ -11,16 +11,16 @@ Self-checking scoreboard → Assertion-based checking → Coverage closure.**
 
 ## Project Summary
 
-| Property            | Value                                    |
-|---------------------|------------------------------------------|
-| Design Under Test   | 4-bit ALU (8 operations)                 |
-| Language            | SystemVerilog (no UVM)                   |
-| Simulator           | ModelSim / Questa (Windows or Linux)     |
-| Directed vectors    | 26                                       |
-| Random vectors      | 10,000                                   |
-| Assertions          | 17 (immediate, combinational)            |
-| Functional coverage | 14 coverpoints (manual tracking)         |
-| Result              | All tests PASS, 0 assertion failures     |
+| Property            | Value                                          |
+|---------------------|------------------------------------------      |
+| Design Under Test   | 4-bit ALU (8 operations)                       |
+| Language            | SystemVerilog (no UVM)                         |
+| Simulator           | ModelSim / Questa (Windows or Linux)           |
+| Directed vectors    | 26                                             |
+| Random vectors      | 10,000                                         |
+| Assertions          | Immediate assertion checker for ALU properties |
+| Functional coverage | 14 coverpoints (manual tracking)               |
+| Result              | All tests PASS, 0 assertion failures           |
 
 ---
 
@@ -75,8 +75,8 @@ alu_verification/
 
 ```tcl
 # In the ModelSim transcript window:
-cd C:/path/to/alu_verification
-do sim/run_sim.do
+cd C:/path/to/alu_verification/sim
+do run_sim.do
 ```
 
 The script will:
@@ -211,7 +211,7 @@ Failed          : 0
 | Directed testing         | Phase 1, 26 labeled test vectors         |
 | Constrained-random       | Phase 2, LCG-based 10K random vectors    |
 | Self-checking scoreboard | `check_outputs` task + counters          |
-| Immediate assertions     | `assertions/alu_sva.sv`, 17 properties   |
+| Immediate assertions     | `assertions/alu_sva.sv`                  |
 | Functional coverage      | Manual bitflag tracking, 14 coverpoints  |
 | Simulation scripting     | `sim/run_sim.do` (TCL for ModelSim)      |
 | Debug messages           | Detailed `[FAIL]` output with all signals|
