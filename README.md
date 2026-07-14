@@ -192,6 +192,21 @@ A scoreboard mismatch, assertion failure, missed coverage target or timeout caus
 
 ---
 
+## Waveform Example
+
+The waveform below shows the directed-test phase of the ALU verification environment.
+
+It includes:
+- DUT inputs `A`, `B`, and `op`
+- DUT outputs `result`, `carry`, `zero`, and `overflow`
+- scoreboard counters (`total_tests`, `total_pass`, `total_fail`)
+- assertion failure counter
+- functional coverage flags and opcode coverage tracking
+
+This screenshot helps illustrate that the verification environment is self-checking and that coverage/status signals are updated during simulation.
+
+![Waveform example](docs/images/waveform_directed_tests.png)
+
 ## Quartus Note
 
 `alu.qsf` is a synthesis project for the RTL top level `alu`. Testbench and assertion files are simulation-only and are compiled by `sim/run_sim.do`, not by Quartus synthesis.
