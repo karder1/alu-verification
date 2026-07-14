@@ -1,266 +1,201 @@
 # 4-bit ALU — Design Verification Project
 
-A complete, beginner-to-intermediate Design Verification (DV) environment
-for a 4-bit Arithmetic Logic Unit, written in SystemVerilog.
+A beginner-to-intermediate Design Verification environment for a 4-bit
+Arithmetic Logic Unit, written in SystemVerilog and runnable in ModelSim/Questa.
 
-This project demonstrates the full DV workflow used in industry:
-**Verification Plan → RTL analysis → Directed tests → Randomized tests →
-Self-checking scoreboard → Assertion-based checking → Coverage closure.**
+The project demonstrates this verification flow:
+
+**Verification plan → directed tests → exhaustive tests → independent reference
+model → self-checking scoreboard → assertions → coverage closure.**
 
 ---
 
 ## Project Summary
 
-| Property            | Value                                          |
-|---------------------|------------------------------------------      |
-| Design Under Test   | 4-bit ALU (8 operations)                       |
-| Language            | SystemVerilog (no UVM)                         |
-| Simulator           | ModelSim / Questa (Windows or Linux)           |
-| Directed vectors    | 26                                             |
-| Random vectors      | 10,000                                         |
-| Assertions          | Immediate assertion checker for ALU properties |
-| Functional coverage | 14 coverpoints (manual tracking)               |
-| Result              | All tests PASS, 0 assertion failures           |
+| Property | Value |
+|---|---|
+| Design Under Test | 4-bit combinational ALU with 8 operations |
+| Language | SystemVerilog, no UVM |
+| Simulator | ModelSim / Questa |
+| Directed vectors | 26 |
+| Exhaustive vectors | 2,048 (`16 × 16 × 8`) |
+| Total vectors | 2,074 |
+| Assertions | Immediate property checks with failure counting |
+| Functional coverage | 16 manually tracked targets |
+| Regression result | PASS only when scoreboard, assertions and coverage all pass |
+
+The previous LCG-based 10,000-vector phase was replaced by exhaustive testing.
+Because the complete valid input space contains only 2,048 combinations,
+exhaustive testing is both smaller and stronger: every valid `{A, B, op}` vector
+is checked exactly once.
 
 ---
 
 ## Repository Structure
 
-```
+```text
 alu_verification/
 ├── rtl/
-│   └── alu.sv                  # Design Under Test — 4-bit ALU
+│   └── alu.sv
 ├── tb/
-│   └── alu_tb_selfcheck.sv     # Self-checking testbench (main)
+│   └── alu_tb_selfcheck.sv
 ├── assertions/
-│   └── alu_sva.sv              # Assertion checker module
+│   └── alu_sva.sv
 ├── sim/
-│   ├── run_sim.do              # ModelSim: compile + simulate
-│   └── waves.do                # ModelSim: waveform window setup
+│   ├── run_sim.do
+│   └── waves.do
 ├── docs/
-│   └── verification_plan.md   # VPlan: what, how, and done criteria
+│   └── verification_plan.md
+├── alu.qsf
+├── alu_verification.qpf
 └── README.md
 ```
 
 ---
 
-## ALU Operation Table
+## ALU Operations
 
-| op\[2:0\] | Mnemonic | Operation                    |
-|-----------|----------|------------------------------|
-| 000       | ADD      | result = A + B               |
-| 001       | SUB      | result = A − B               |
-| 010       | AND      | result = A & B               |
-| 011       | OR       | result = A \| B              |
-| 100       | XOR      | result = A ^ B               |
-| 101       | NOT      | result = ~A (B ignored)      |
-| 110       | SHL      | result = A << 1, carry=A\[3\]|
-| 111       | SHR      | result = A >> 1, carry=A\[0\]|
+| `op[2:0]` | Operation | Definition |
+|---|---|---|
+| `000` | ADD | `result = A + B` |
+| `001` | SUB | `result = A - B` |
+| `010` | AND | `result = A & B` |
+| `011` | OR | `result = A \| B` |
+| `100` | XOR | `result = A ^ B` |
+| `101` | NOT | `result = ~A`, B ignored |
+| `110` | SHL | `result = A << 1`, `carry = A[3]` |
+| `111` | SHR | `result = A >> 1`, `carry = A[0]` |
 
-**Status Flags:**  
-- `carry` — unsigned carry-out / borrow / shift-out  
-- `zero` — high when result == 0 (all operations)  
-- `overflow` — signed overflow (ADD and SUB only)
+Flags:
+
+- `carry`: ADD carry-out, SUB borrow, or shifted-out bit.
+- `zero`: high exactly when `result == 0`.
+- `overflow`: signed two's-complement overflow for ADD and SUB only.
+
+---
+
+## Verification Architecture
+
+```text
+A, B, op
+   ├──────────────► DUT ───────────────► actual outputs
+   │                                         │
+   └──────────────► reference model ─────► expected outputs
+                                             │
+                                  scoreboard comparison
+
+The assertion checker monitors DUT properties in parallel.
+Coverage records which operations, flags and boundary conditions were exercised.
+```
+
+### Directed phase
+
+The first phase contains 26 labeled tests (`DT-001` to `DT-026`). They make
+important behavior visible in the console and deliberately target carry, borrow,
+zero, signed overflow, logical identities, shifts and ignored-B behavior.
+
+### Exhaustive phase
+
+The second phase runs:
+
+```text
+8 opcodes × 16 A values × 16 B values = 2,048 vectors
+```
+
+Every vector is compared with the independent reference model. The reference
+model detects overflow by sign-extending the operands and checking whether the
+mathematical result is outside the 4-bit signed range `[-8, +7]`; it does not
+copy the RTL's overflow equations.
+
+### Assertions
+
+`assertions/alu_sva.sv` checks:
+
+- zero-flag equivalence;
+- no X/Z on outputs;
+- no carry or overflow for logical operations;
+- AND subset and OR superset properties;
+- `XOR(A,A) == 0`;
+- SHL/SHR shifted-out bits and shifted-in zeros.
+
+Assertion failures are counted and included in the final PASS/FAIL decision.
+
+### Coverage
+
+The testbench tracks 16 targets:
+
+- 8 opcode targets;
+- 3 flag-high targets;
+- 5 operand-boundary targets.
+
+A regression passes only when all targets are hit.
 
 ---
 
 ## How to Run
 
-### Prerequisites
-- ModelSim PE / DE / Questa installed  
-- `vsim` and `vlog` on your PATH  
-  (On Windows: add `C:\intelFPGA\XX.X\modelsim_ase\win32aloem` to PATH)
-
-### Option A — ModelSim GUI (recommended for learning)
+### ModelSim/Questa GUI
 
 ```tcl
-# In the ModelSim transcript window:
 cd C:/path/to/alu_verification/sim
 do run_sim.do
 ```
 
-The script will:
-1. Create the `work` library  
-2. Compile `alu.sv` → `alu_sva.sv` → `alu_tb_selfcheck.sv`  
-3. Start the simulator  
-4. Open the Wave window with all signals pre-configured  
-5. Run until `$finish`
-
-### Option B — Batch mode (no GUI, output to terminal)
+### Batch mode
 
 ```bash
 cd C:\path\to\alu_verification
-vsim -c -do "cd sim; do run_sim.do" -do "quit -f" | tee sim.log
+vsim -c -do "cd sim; do run_sim.do; quit -f" | tee sim.log
+```
+
+The script compiles the files in this order:
+
+```text
+rtl/alu.sv
+assertions/alu_sva.sv
+tb/alu_tb_selfcheck.sv
 ```
 
 ---
 
-## Expected Console Output
+## Expected Final Summary
 
-```
-==============================================
-   ALU SELF-CHECKING TESTBENCH - START
-==============================================
-
+```text
 --- PHASE 1: DIRECTED TESTS ---
-[PASS] DT-001   | op=000 A=3 B=5 -> result=8 carry=0 zero=0 overflow=0
-[PASS] DT-002   | op=000 A=f B=1 -> result=0 carry=1 zero=1 overflow=0
-[PASS] DT-003   | op=000 A=7 B=1 -> result=8 carry=0 zero=0 overflow=1
-[PASS] DT-004   | op=000 A=0 B=5 -> result=5 carry=0 zero=0 overflow=0
-... (26 directed tests) ...
+... 26 directed PASS lines ...
 Phase 1 complete: 26 passed, 0 failed
 
---- PHASE 2: RANDOMIZED TESTS (10,000 vectors, seed=42) ---
-Phase 2 complete: 10026 total passed, 0 total failed
-
-==============================================
-         FUNCTIONAL COVERAGE REPORT
-==============================================
-Opcodes exercised : 8 / 8
-  ADD  (op=000)   : HIT
-  SUB  (op=001)   : HIT
-  AND  (op=010)   : HIT
-  OR   (op=011)   : HIT
-  XOR  (op=100)   : HIT
-  NOT  (op=101)   : HIT
-  SHL  (op=110)   : HIT
-  SHR  (op=111)   : HIT
-
-Flag coverage:
-  carry    == 1   : HIT
-  zero     == 1   : HIT
-  overflow == 1   : HIT
-
-Operand boundary coverage:
-  A == 4h0        : HIT
-  A == 4hF        : HIT
-  B == 4h0        : HIT
-  B == 4hF        : HIT
-  A == B          : HIT
-==============================================
+--- PHASE 2: EXHAUSTIVE TESTS (2,048 vectors) ---
+Phase 2 complete: 2074 total passed, 0 total failed
 
 ==============================================
             SIMULATION SUMMARY
 ==============================================
-Total vectors   : 10026
-Passed          : 10026
-Failed          : 0
+Total vectors       : 2074
+Scoreboard passed   : 2074
+Scoreboard failed   : 0
+Assertion failures  : 0
+Coverage closure    : PASS
 ----------------------------------------------
->>> ALL TESTS PASSED - DUT IS CORRECT <<<
+>>> ALL VERIFICATION CHECKS PASSED <<<
 ==============================================
 ```
 
----
-
-## Verification Methodology
-
-```
-           Specification
-                 │
-                 ▼
-        ┌─────────────────┐     Written BEFORE any code
-        │ Verification    │     Documents: what to test, how to test it,
-        │ Plan (VPlan)    │     and what "done" means.
-        └────────┬────────┘
-                 │
-                 ▼
-        ┌─────────────────┐     Independent implementation of the spec.
-        │  Golden Model   │     Never derived from RTL — otherwise you
-        │  (Reference)    │     replicate bugs instead of catching them.
-        └────────┬────────┘
-                 │
-    ┌────────────┴────────────┐
-    │                         │
-    ▼                         ▼
-┌──────────┐          ┌──────────────┐
-│ Directed │          │  Randomized  │
-│  Tests   │          │    Tests     │
-│ (26 vec) │          │ (10K vectors)│
-└────┬─────┘          └───────┬──────┘
-     │                        │
-     └───────────┬────────────┘
-                 │
-                 ▼
-    ┌───────────────────────┐
-    │  Self-Checking        │
-    │  Scoreboard           │  DUT output vs Golden Model
-    │  (auto PASS/FAIL)     │  every single vector
-    └────────────┬──────────┘
-                 │
-                 ▼
-    ┌───────────────────────┐
-    │  Assertion Checker    │  Always-on property monitors
-    │  (alu_sva.sv)         │  Fire immediately on violation
-    └────────────┬──────────┘
-                 │
-                 ▼
-    ┌───────────────────────┐
-    │  Coverage Closure     │  Have we tested the RIGHT things?
-    │  (14 coverpoints)     │  Drives test addition if bins MISS
-    └───────────────────────┘
-```
+A scoreboard mismatch, assertion failure, missed coverage target or timeout
+causes the regression to fail.
 
 ---
 
-## Key Concepts Demonstrated
+## Quartus Note
 
-| Concept                  | Where Implemented                        |
-|--------------------------|------------------------------------------|
-| Verification Plan        | `docs/verification_plan.md`              |
-| Golden reference model   | `golden_model` task in testbench         |
-| Directed testing         | Phase 1, 26 labeled test vectors         |
-| Constrained-random       | Phase 2, LCG-based 10K random vectors    |
-| Self-checking scoreboard | `check_outputs` task + counters          |
-| Immediate assertions     | `assertions/alu_sva.sv`                  |
-| Functional coverage      | Manual bitflag tracking, 14 coverpoints  |
-| Simulation scripting     | `sim/run_sim.do` (TCL for ModelSim)      |
-| Debug messages           | Detailed `[FAIL]` output with all signals|
+`alu.qsf` is a synthesis project for the RTL top level `alu`. Testbench and
+assertion files are simulation-only and are compiled by `sim/run_sim.do`, not by
+Quartus synthesis.
 
 ---
-
-## Common Compile Errors & Fixes
-
-| Error Message                                  | Cause & Fix                                                  |
-|------------------------------------------------|--------------------------------------------------------------|
-| `** Error: Undefined variable 'i'`             | Declare `int i` at the top of the block, not inside `for`   |
-| `** Error: Cannot find port 'result'`          | Module port name mismatch — check instantiation port names   |
-| `** Error: near "inside": syntax error`        | `inside` needs `-sv` flag: add `-sv` to `vlog` command      |
-| `** Warning: implicit wire declaration`        | Add explicit `logic` or `wire` declaration                   |
-| `** Error: Unknown module alu`                 | Compile `alu.sv` before `alu_tb_selfcheck.sv`                |
-| `** Error: Unknown module alu_sva`             | Compile `alu_sva.sv` before `alu_tb_selfcheck.sv`            |
-| `could not find signal sim:/tb/dut/full_result`| Add `+acc` to `vlog` and `-voptargs=+acc` to `vsim`         |
-| `Infinite loop / simulation hangs`             | Timeout fires at 50 ms; check for missing `#10` in tasks    |
-
----
-
-## What to Check in the Wave Window
-
-| Signal         | What to Look For                                    |
-|----------------|-----------------------------------------------------|
-| `op[2:0]`      | Cycles through 000–111 during directed tests        |
-| `result[3:0]`  | Changes within 10 ns of input change (combinational)|
-| `carry`        | Only high for ADD carry, SUB borrow, SHL/SHR shifts |
-| `zero`         | Goes high exactly when `result == 4'h0`             |
-| `overflow`     | Only high for signed overflow in ADD/SUB            |
-| `full_result`  | Bit [4] should match `carry` for ADD/SUB            |
-| `total_pass`   | Counts up smoothly; should reach 10026              |
-| `total_fail`   | Must stay at 0 throughout; any nonzero = bug        |
-| `op_seen[7:0]` | All 8 bits go to 1 during Phase 1 directed tests    |
-
----
-
-## What I Learned
-
-Through this project, I learned how a Design Verification workflow is structured beyond writing a simple testbench. I practiced writing a verification plan before coding, creating directed tests from expected corner cases, building an independent golden model, comparing DUT outputs automatically with a self checking scoreboard, and using assertions to detect incorrect behavior during simulation.
-
-I also learned that randomized testing alone is not enough. Even with 10,000 random vectors, directed tests are still important for explicitly checking corner cases such as carry out, borrow, signed overflow, zero result, and shift behavior.
-
-This project helped me understand the difference between simply simulating a design and building a reusable verification environment.
 
 ## Author
 
 **Bui Huu Phat**  
 Electronics and Telecommunications, University of Science, VNU-HCM  
-Focus: IC Design Verification  
-
----
+Focus: IC Design Verification

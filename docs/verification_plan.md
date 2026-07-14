@@ -1,191 +1,177 @@
 # Verification Plan — 4-bit ALU
-**Version:** 1.0  
-**Author:** [Your Name]  
-**Date:** 2025  
-**Status:** Active  
+
+**Version:** 1.1  
+**Author:** Bui Huu Phat  
+**Date:** July 2026  
+**Status:** Active
 
 ---
 
 ## 1. Design Overview
 
-| Property        | Value                              |
-|-----------------|------------------------------------|
-| Module name     | `alu`                              |
-| File            | `rtl/alu.sv`                       |
-| Interface type  | Combinational (no clock)           |
-| Inputs          | `A[3:0]`, `B[3:0]`, `op[2:0]`     |
-| Outputs         | `result[3:0]`, `carry`, `zero`, `overflow` |
-| Operations      | 8 (ADD, SUB, AND, OR, XOR, NOT, SHL, SHR) |
+| Property | Value |
+|---|---|
+| Module | `alu` |
+| RTL file | `rtl/alu.sv` |
+| Interface | Combinational, no clock |
+| Inputs | `A[3:0]`, `B[3:0]`, `op[2:0]` |
+| Outputs | `result[3:0]`, `carry`, `zero`, `overflow` |
+| Operations | ADD, SUB, AND, OR, XOR, NOT, SHL, SHR |
 
-### 1.1 Operation Table
+### Flag definitions
 
-| op[2:0] | Mnemonic | Description                        |
-|---------|----------|------------------------------------|
-| 000     | ADD      | result = A + B; carry = carry-out  |
-| 001     | SUB      | result = A − B; carry = borrow     |
-| 010     | AND      | result = A & B                     |
-| 011     | OR       | result = A \| B                    |
-| 100     | XOR      | result = A ^ B                     |
-| 101     | NOT      | result = ~A  (B is ignored)        |
-| 110     | SHL      | result = A << 1; carry = A[3]      |
-| 111     | SHR      | result = A >> 1; carry = A[0]      |
-
-### 1.2 Flag Definitions
-
-| Flag     | Condition                                              |
-|----------|--------------------------------------------------------|
-| carry    | Unsigned carry-out (ADD), borrow (SUB), shifted-out bit (SHL/SHR) |
-| zero     | Asserted when `result == 4'b0000`, for ALL operations  |
-| overflow | Signed two's-complement overflow for ADD and SUB only  |
+| Flag | Definition |
+|---|---|
+| `carry` | ADD carry-out, SUB borrow (`A < B`), SHL/SHR shifted-out bit |
+| `zero` | `1` exactly when `result == 4'b0000` |
+| `overflow` | Signed two's-complement overflow for ADD and SUB only |
 
 ---
 
 ## 2. Verification Goals
 
-### 2.1 Functional Goals (must be 100% complete)
-- [ ] Verify correct `result` for all 8 opcodes
-- [ ] Verify `carry` flag correct for ADD, SUB, SHL, SHR
-- [ ] Verify `carry == 0` for AND, OR, XOR, NOT
-- [ ] Verify `zero` flag correct for all operations
-- [ ] Verify `overflow` flag correct for ADD and SUB signed overflow cases
-- [ ] Verify `overflow == 0` for all non-arithmetic operations
-- [ ] Verify no X or Z values on any output for any valid input combination
+The environment shall verify:
 
-### 2.2 Structural Goals
-- [ ] All 8 opcodes exercised at least once
-- [ ] All status flag states (0 and 1) exercised for `carry`, `zero`, `overflow`
-- [ ] Boundary operands exercised: A=0, A=0xF, B=0, B=0xF, A==B
+- the result of all eight operations;
+- ADD carry-out and SUB borrow behavior;
+- SHL and SHR shifted-out bits;
+- zero-flag equivalence for every operation;
+- signed overflow and non-overflow cases for ADD and SUB;
+- zero carry/overflow for logical operations;
+- deterministic outputs without X/Z for valid input combinations;
+- complete exercise of the valid input space.
 
 ---
 
-## 3. Test Plan
+## 3. Test Strategy
 
-### 3.1 Directed Tests
+### 3.1 Directed tests
 
-All directed tests are in `tb/alu_tb_selfcheck.sv` Phase 1.  
-Label format: `DT-NNN` maps to the row below.
+The 26 directed tests provide readable corner-case evidence and requirement
+traceability.
 
-| Test ID | Op     | A    | B    | Expected Result | Expected Flags         | Requirement Covered             |
-|---------|--------|------|------|-----------------|------------------------|---------------------------------|
-| DT-001  | ADD    | 0x3  | 0x5  | 0x8             | none                   | ADD basic                       |
-| DT-002  | ADD    | 0xF  | 0x1  | 0x0             | carry=1, zero=1        | ADD carry-out                   |
-| DT-003  | ADD    | 0x7  | 0x1  | 0x8             | overflow=1             | ADD signed overflow (+→−)       |
-| DT-004  | ADD    | 0x0  | 0x5  | 0x5             | none                   | ADD with A=0                    |
-| DT-005  | ADD    | 0x0  | 0x0  | 0x0             | zero=1                 | ADD both zero                   |
-| DT-006  | ADD    | 0xF  | 0xF  | 0xE             | carry=1                | ADD both max (double carry)     |
-| DT-007  | SUB    | 0x8  | 0x3  | 0x5             | none                   | SUB basic                       |
-| DT-008  | SUB    | 0x0  | 0x1  | 0xF             | carry=1 (borrow)       | SUB with borrow                 |
-| DT-009  | SUB    | 0x5  | 0x5  | 0x0             | zero=1                 | SUB equal operands              |
-| DT-010  | SUB    | 0x8  | 0x1  | 0x7             | overflow=1             | SUB signed overflow (−→+)       |
-| DT-011  | AND    | 0x5  | 0xA  | 0x0             | zero=1                 | AND complementary values        |
-| DT-012  | AND    | 0x7  | 0xF  | 0x7             | none                   | AND with all-ones mask          |
-| DT-013  | AND    | 0xF  | 0x0  | 0x0             | zero=1                 | AND with B=0                    |
-| DT-014  | OR     | 0x5  | 0xA  | 0xF             | none                   | OR complementary → all ones     |
-| DT-015  | OR     | 0x7  | 0x0  | 0x7             | none                   | OR with B=0                     |
-| DT-016  | XOR    | 0x9  | 0x9  | 0x0             | zero=1                 | XOR same values → zero          |
-| DT-017  | XOR    | 0x5  | 0xA  | 0xF             | none                   | XOR complementary → all ones    |
-| DT-018  | NOT    | 0x0  | —    | 0xF             | none                   | NOT of zero → all ones          |
-| DT-019  | NOT    | 0xF  | —    | 0x0             | zero=1                 | NOT of all ones → zero          |
-| DT-020  | NOT    | 0xA  | —    | 0x5             | none                   | NOT of alternating pattern      |
-| DT-021  | SHL    | 0x8  | —    | 0x0             | carry=1, zero=1        | SHL MSB=1 → carry, result=0     |
-| DT-022  | SHL    | 0x3  | —    | 0x6             | none                   | SHL normal                      |
-| DT-023  | SHL    | 0xF  | —    | 0xE             | carry=1                | SHL all ones                    |
-| DT-024  | SHR    | 0x1  | —    | 0x0             | carry=1, zero=1        | SHR LSB=1 → carry, result=0     |
-| DT-025  | SHR    | 0xA  | —    | 0x5             | none                   | SHR normal                      |
-| DT-026  | SHR    | 0xF  | —    | 0x7             | carry=1                | SHR all ones                    |
+| ID | Op | A | B | Expected result | Expected flags | Purpose |
+|---|---|---:|---:|---:|---|---|
+| DT-001 | ADD | 3 | 5 | 8 | none | basic addition |
+| DT-002 | ADD | F | 1 | 0 | carry=1, zero=1 | carry-out |
+| DT-003 | ADD | 7 | 1 | 8 | overflow=1 | positive signed overflow |
+| DT-004 | ADD | 0 | 5 | 5 | none | zero operand |
+| DT-005 | ADD | 0 | 0 | 0 | zero=1 | zero result |
+| DT-006 | ADD | F | F | E | carry=1 | maximum unsigned operands |
+| DT-007 | SUB | 7 | 3 | 4 | none | basic subtraction without overflow |
+| DT-008 | SUB | 0 | 1 | F | carry=1 | unsigned borrow |
+| DT-009 | SUB | 5 | 5 | 0 | zero=1 | equal operands |
+| DT-010 | SUB | 8 | 1 | 7 | overflow=1 | `-8 - 1` signed overflow |
+| DT-011 | AND | 5 | A | 0 | zero=1 | complementary inputs |
+| DT-012 | AND | 7 | F | 7 | none | all-ones mask |
+| DT-013 | AND | F | 0 | 0 | zero=1 | zero mask |
+| DT-014 | OR | 5 | A | F | none | complementary inputs |
+| DT-015 | OR | 7 | 0 | 7 | none | OR identity |
+| DT-016 | XOR | 9 | 9 | 0 | zero=1 | self-cancellation |
+| DT-017 | XOR | 5 | A | F | none | complementary inputs |
+| DT-018 | NOT | 0 | X | F | none | B ignored |
+| DT-019 | NOT | F | X | 0 | zero=1 | B ignored, zero result |
+| DT-020 | NOT | A | X | 5 | none | alternating pattern |
+| DT-021 | SHL | 8 | X | 0 | carry=1, zero=1 | MSB shifted out |
+| DT-022 | SHL | 3 | X | 6 | none | normal shift |
+| DT-023 | SHL | F | X | E | carry=1 | all-ones input |
+| DT-024 | SHR | 1 | X | 0 | carry=1, zero=1 | LSB shifted out |
+| DT-025 | SHR | A | X | 5 | none | normal shift |
+| DT-026 | SHR | F | X | 7 | carry=1 | all-ones input |
 
-### 3.2 Randomized Tests
+### 3.2 Exhaustive tests
 
-| Property         | Value                                      |
-|------------------|--------------------------------------------|
-| Vectors          | 10,000                                     |
-| Seed             | 42 (deterministic, change to explore more) |
-| RNG method       | Linear Congruential Generator (LCG)        |
-| Checker          | Golden model task in testbench             |
-| Pass criterion   | Zero mismatches across all 10,000 vectors  |
+| Property | Value |
+|---|---|
+| Valid A values | 16 |
+| Valid B values | 16 |
+| Opcodes | 8 |
+| Total exhaustive vectors | 2,048 |
+| Checker | Independent golden-model task |
+| Pass criterion | Zero mismatches across all 2,048 vectors |
 
-### 3.3 Assertion Checks
+Exhaustive testing replaces the previous LCG random phase. It guarantees that
+every valid `{A, B, op}` combination is checked.
 
-| Assertion ID            | Property                                      |
-|-------------------------|-----------------------------------------------|
-| assert_zero_flag_hi     | `result==0 → zero==1`                        |
-| assert_zero_flag_lo     | `result≠0 → zero==0`                        |
-| assert_no_x_result      | `result` never X or Z                        |
-| assert_no_x_carry       | `carry` never X or Z                         |
-| assert_no_x_zero        | `zero` never X or Z                          |
-| assert_no_x_overflow    | `overflow` never X or Z                      |
-| assert_logic_no_carry   | `carry==0` for AND/OR/XOR/NOT                |
-| assert_logic_no_overflow| `overflow==0` for AND/OR/XOR/NOT             |
-| assert_and_subset_A     | AND result has no bits not present in A      |
-| assert_and_subset_B     | AND result has no bits not present in B      |
-| assert_or_superset_A    | OR result has all bits from A                |
-| assert_or_superset_B    | OR result has all bits from B                |
-| assert_xor_self_cancel  | `XOR(A,A)==0` and `zero==1`                  |
-| assert_shl_carry        | `carry == A[3]` before shift                 |
-| assert_shl_lsb_zero     | `result[0]==0` after SHL                     |
-| assert_shr_carry        | `carry == A[0]` before shift                 |
-| assert_shr_msb_zero     | `result[3]==0` after SHR                     |
+### 3.3 Reference-model independence
+
+The DUT uses Boolean sign-bit equations for ADD/SUB overflow. The reference
+model uses a different method:
+
+1. sign-extend A and B;
+2. calculate the mathematical signed result;
+3. assert overflow when the result is outside `[-8, +7]`.
+
+SUB borrow is calculated as `A < B`, rather than copying the RTL's intermediate
+MSB implementation.
 
 ---
 
-## 4. Functional Coverage Plan
+## 4. Assertion Plan
 
-### 4.1 Opcode Coverage
-**Goal:** Every opcode must be exercised at least once.  
-**Tracked by:** `op_seen[7:0]` register in testbench.  
-**Target:** `op_seen == 8'hFF` (all 8 bits set).
+| Property | Requirement |
+|---|---|
+| Zero equivalence | `zero == (result == 0)` |
+| Known outputs | no X/Z on result or flags |
+| Logical flags | carry=0 and overflow=0 for AND/OR/XOR/NOT |
+| AND property | result is a subset of both operands |
+| OR property | result is a superset of both operands |
+| XOR identity | equal operands produce zero |
+| SHL property | carry=A[3], result[0]=0 |
+| SHR property | carry=A[0], result[3]=0 |
 
-### 4.2 Status Flag Coverage
-| Coverpoint          | Target |
-|---------------------|--------|
-| `carry == 1`        | HIT    |
-| `zero == 1`         | HIT    |
-| `overflow == 1`     | HIT    |
-
-### 4.3 Operand Boundary Coverage
-| Coverpoint    | Target |
-|---------------|--------|
-| `A == 4'h0`   | HIT    |
-| `A == 4'hF`   | HIT    |
-| `B == 4'h0`   | HIT    |
-| `B == 4'hF`   | HIT    |
-| `A == B`      | HIT    |
+Every failure increments `assertion_fail_count`. The final regression result is
+FAIL when this count is nonzero.
 
 ---
 
-## 5. Completion Criteria
+## 5. Functional Coverage Plan
 
-The verification is complete when ALL of the following are true:
+### Opcode targets — 8
 
-1. **Directed tests:** All 26 directed tests report `[PASS]`
-2. **Randomized tests:** Zero mismatches in 10,000 random vectors
-3. **Assertions:** Zero assertion failures during simulation
-4. **Functional coverage:**
-   - `op_seen == 8'hFF` (all opcodes hit)
-   - All flag coverage bins: HIT
-   - All operand boundary bins: HIT
-5. **Clean compile:** Zero errors, zero critical warnings
+All bits of `op_seen[7:0]` must be set.
+
+### Flag targets — 3
+
+- carry observed high;
+- zero observed high;
+- overflow observed high.
+
+### Operand-boundary targets — 5
+
+- A=0;
+- A=F;
+- B=0;
+- B=F;
+- A=B.
+
+Total manually tracked targets: **16**.
 
 ---
 
-## 6. Tools & Environment
+## 6. Completion Criteria
 
-| Tool          | Version        | Purpose                        |
-|---------------|----------------|--------------------------------|
-| ModelSim      | 10.7+ / Questa | Simulation and waveform viewer |
-| Language      | SystemVerilog  | RTL, testbench, assertions     |
-| OS            | Windows 10/11  | Development environment        |
+Verification is complete only when all conditions are true:
+
+1. all 26 directed tests pass;
+2. all 2,048 exhaustive vectors pass;
+3. `assertion_fail_count == 0`;
+4. all 16 coverage targets are hit;
+5. compilation completes without errors;
+6. the simulation does not reach the watchdog timeout.
+
+The testbench calls `$fatal` when any verification condition fails so a batch
+regression receives a failing simulator status.
 
 ---
 
-## 7. File List
+## 7. Files
 
-| File                           | Purpose                        |
-|--------------------------------|--------------------------------|
-| `rtl/alu.sv`                   | Design Under Test              |
-| `tb/alu_tb_selfcheck.sv`       | Self-checking testbench        |
-| `assertions/alu_sva.sv`        | Assertion checker module       |
-| `sim/run_sim.do`               | ModelSim compile+run script    |
-| `sim/waves.do`                 | Waveform window setup          |
-| `docs/verification_plan.md`    | This document                  |
-| `README.md`                    | Project overview               |
+| File | Purpose |
+|---|---|
+| `rtl/alu.sv` | synthesizable DUT |
+| `tb/alu_tb_selfcheck.sv` | stimulus, reference model, scoreboard and coverage |
+| `assertions/alu_sva.sv` | property checker and assertion-failure counter |
+| `sim/run_sim.do` | ModelSim/Questa compile and run script |
+| `sim/waves.do` | waveform setup |
+| `alu.qsf` | Quartus RTL synthesis project |

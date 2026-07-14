@@ -1,0 +1,17 @@
+# ModelSim / Questa generated files
+work/
+sim/work/
+transcript
+vsim.wlf
+*.wlf
+*.log
+
+# Quartus generated files
+db/
+incremental_db/
+output_files/
+*.qws
+
+# OS generated files
+.DS_Store
+Thumbs.db

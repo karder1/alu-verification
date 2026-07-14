@@ -86,6 +86,10 @@ add wave -noupdate -label "total_fail" \
     -radix unsigned \
     sim:/alu_tb_selfcheck/total_fail
 
+add wave -noupdate -label "assertion_fail_count" \
+    -radix unsigned \
+    sim:/alu_tb_selfcheck/assertion_fail_count
+
 
 # ==============================================================
 # GROUP 4 : INTERNAL DUT SIGNAL (for debugging)
@@ -129,6 +133,14 @@ add wave -noupdate -label "cov_A_ones" \
     -radix bin \
     sim:/alu_tb_selfcheck/cov_A_ones
 
+add wave -noupdate -label "cov_B_zero" \
+    -radix bin \
+    sim:/alu_tb_selfcheck/cov_B_zero
+
+add wave -noupdate -label "cov_B_ones" \
+    -radix bin \
+    sim:/alu_tb_selfcheck/cov_B_ones
+
 add wave -noupdate -label "cov_A_eq_B" \
     -radix bin \
     sim:/alu_tb_selfcheck/cov_A_eq_B
@@ -139,7 +151,7 @@ add wave -noupdate -label "cov_A_eq_B" \
 # ==============================================================
 
 # Zoom to fit all simulation time in the window
-WaveRestoreZoom {0 ns} {500 ns}
+WaveRestoreZoom {0 ns} {25 us}
 
 # Update the display
 update

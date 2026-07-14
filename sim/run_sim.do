@@ -1,8 +1,8 @@
 # ============================================================
 # File: sim/run_sim.do
 # Purpose: Compile and run ALU verification project in ModelSim
-# Run from sim folder:
-#   cd C:/Users/Phat/OneDrive/Documents/TechProj/ALU_4bit/alu_verification/sim
+# Run from the sim folder:
+#   cd C:/path/to/alu_verification/sim
 #   do run_sim.do
 # ============================================================
 

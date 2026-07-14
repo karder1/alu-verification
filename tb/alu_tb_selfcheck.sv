@@ -1,47 +1,31 @@
 // ============================================================
 // File    : tb/alu_tb_selfcheck.sv
 // Project : 4-bit ALU Verification
-// Author  : [Your Name]
-// Date    : 2025
+// Author  : Bui Huu Phat
+// Date    : 07/2026
 //
 // Description:
 //   Self-checking testbench for alu.sv.
+//
 //   Verification flow:
-//     Phase 1 — Directed tests  (hand-crafted corner cases)
-//     Phase 2 — Randomized tests (golden model comparison)
-//     Phase 3 — Summary report  (scoreboard + coverage)
-//
-//   The golden model is an independent implementation of the ALU
-//   specification, written separately from the RTL.  Any mismatch
-//   between DUT and golden model flags a real bug.
-//
-//   Functional coverage is tracked manually using bit-flags so the
-//   file stays in plain Verilog-compatible SystemVerilog without
-//   needing a UVM or coverage-group-capable license.
+//     Phase 1 - 26 directed corner-case tests
+//     Phase 2 - exhaustive testing of all 2,048 valid inputs
+//     Phase 3 - scoreboard, assertion and coverage summary
 // ============================================================
 
 `timescale 1ns / 1ps
 
 module alu_tb_selfcheck;
 
-    // ============================================================
-    // 1. SIGNAL DECLARATIONS
-    // ============================================================
-
-    // Testbench drives these (logic, not wire, because we assign in initial)
+    // DUT interface
     logic [3:0] A;
     logic [3:0] B;
     logic [2:0] op;
-
-    // DUT drives these
     logic [3:0] result;
     logic       carry;
     logic       zero;
     logic       overflow;
 
-    // ============================================================
-    // 2. DUT INSTANTIATION
-    // ============================================================
     alu dut (
         .A        (A),
         .B        (B),
@@ -52,68 +36,45 @@ module alu_tb_selfcheck;
         .overflow (overflow)
     );
 
-    // ============================================================
-    // 3. ASSERTION CHECKER INSTANTIATION
-    //
-    //   alu_sva monitors all DUT outputs in parallel with the
-    //   testbench.  Any assertion violation prints an error and
-    //   helps pinpoint bugs at the exact simulation moment.
-    //
-    //   In a real project this would be done with a SystemVerilog
-    //   'bind' statement.  We instantiate it directly here for
-    //   simplicity and ModelSim compatibility.
-    // ============================================================
+    // Assertion failures are reported separately from scoreboard mismatches.
+    int unsigned assertion_fail_count;
+
     alu_sva u_sva (
-        .A        (A),
-        .B        (B),
-        .op       (op),
-        .result   (result),
-        .carry    (carry),
-        .zero     (zero),
-        .overflow (overflow)
+        .A                    (A),
+        .B                    (B),
+        .op                   (op),
+        .result               (result),
+        .carry                (carry),
+        .zero                 (zero),
+        .overflow             (overflow),
+        .assertion_fail_count (assertion_fail_count)
     );
 
-    // ============================================================
-    // 4. SCOREBOARD COUNTERS
-    // ============================================================
-    int unsigned total_tests  = 0;
-    int unsigned total_pass   = 0;
-    int unsigned total_fail   = 0;
+    // Scoreboard counters
+    int unsigned total_tests = 0;
+    int unsigned total_pass  = 0;
+    int unsigned total_fail  = 0;
 
-    // ============================================================
-    // 5. FUNCTIONAL COVERAGE TRACKING
-    //
-    //    We track coverage manually with simple flags.
-    //    Each flag is set the first time a condition is observed.
-    //    At the end we report which ones were never hit.
-    // ============================================================
-
-    // op_seen[i] = 1 when opcode i has been exercised at least once
+    // Manual functional coverage targets: 8 + 3 + 5 = 16 targets.
     logic [7:0] op_seen = 8'h00;
 
-    // Flag coverage
-    logic cov_carry_high    = 1'b0;   // carry == 1 seen
-    logic cov_zero_high     = 1'b0;   // zero  == 1 seen
-    logic cov_overflow_high = 1'b0;   // overflow == 1 seen
+    logic cov_carry_high    = 1'b0;
+    logic cov_zero_high     = 1'b0;
+    logic cov_overflow_high = 1'b0;
 
-    // Operand boundary coverage
-    logic cov_A_zero = 1'b0;   // A == 4'h0
-    logic cov_A_ones = 1'b0;   // A == 4'hF
-    logic cov_B_zero = 1'b0;   // B == 4'h0
-    logic cov_B_ones = 1'b0;   // B == 4'hF
-    logic cov_A_eq_B = 1'b0;   // A == B
+    logic cov_A_zero = 1'b0;
+    logic cov_A_ones = 1'b0;
+    logic cov_B_zero = 1'b0;
+    logic cov_B_ones = 1'b0;
+    logic cov_A_eq_B = 1'b0;
 
     // ============================================================
-    // 5. GOLDEN MODEL FUNCTION
+    // Independent reference model
     //
-    //    This function computes the EXPECTED outputs using the
-    //    specification, NOT by reading the DUT RTL.
-    //    It is the ground truth for all comparison checks.
-    //
-    //    Using an automatic function lets us call it inline with
-    //    output values returned via a packed struct-style approach.
-    //    Since SV functions return one value, we use a task instead
-    //    so we can populate four output variables.
+    // The RTL detects overflow with sign-bit Boolean equations.
+    // This model instead sign-extends the operands and checks whether
+    // the mathematical result lies outside the 4-bit signed range
+    // [-8, +7]. SUB borrow is computed directly with A < B.
     // ============================================================
     task automatic golden_model (
         input  logic [3:0] gA,
@@ -124,112 +85,135 @@ module alu_tb_selfcheck;
         output logic       exp_zero,
         output logic       exp_overflow
     );
-        logic [4:0] tmp;
+        logic        [4:0] unsigned_calc;
+        logic signed [4:0] signed_A;
+        logic signed [4:0] signed_B;
+        logic signed [5:0] signed_calc;
         begin
-            // Safe defaults
+            exp_result   = 4'h0;
             exp_carry    = 1'b0;
             exp_overflow = 1'b0;
-            tmp          = 5'b00000;
+            unsigned_calc = 5'h00;
+            signed_A      = {gA[3], gA};
+            signed_B      = {gB[3], gB};
+            signed_calc   = 6'sd0;
 
             case (gop)
                 3'b000: begin // ADD
-                    tmp          = {1'b0, gA} + {1'b0, gB};
-                    exp_result   = tmp[3:0];
-                    exp_carry    = tmp[4];
-                    exp_overflow = (~gA[3] & ~gB[3] &  exp_result[3])
-                                 | ( gA[3] &  gB[3] & ~exp_result[3]);
+                    unsigned_calc = {1'b0, gA} + {1'b0, gB};
+                    signed_calc   = signed_A + signed_B;
+                    exp_result    = unsigned_calc[3:0];
+                    exp_carry     = (unsigned_calc > 5'd15);
+                    exp_overflow  = (signed_calc > 6'sd7) ||
+                                    (signed_calc < -6'sd8);
                 end
+
                 3'b001: begin // SUB
-                    tmp          = {1'b0, gA} - {1'b0, gB};
-                    exp_result   = tmp[3:0];
-                    exp_carry    = tmp[4];
-                    exp_overflow = (~gA[3] &  gB[3] &  exp_result[3])
-                                 | ( gA[3] & ~gB[3] & ~exp_result[3]);
+                    signed_calc  = signed_A - signed_B;
+                    exp_result   = gA - gB;
+                    exp_carry    = (gA < gB); // carry output is the borrow flag
+                    exp_overflow = (signed_calc > 6'sd7) ||
+                                   (signed_calc < -6'sd8);
                 end
-                3'b010: exp_result = gA & gB;   // AND
-                3'b011: exp_result = gA | gB;   // OR
-                3'b100: exp_result = gA ^ gB;   // XOR
-                3'b101: exp_result = ~gA;        // NOT
-                3'b110: begin                    // SHL
+
+                3'b010: exp_result = gA & gB;
+                3'b011: exp_result = gA | gB;
+                3'b100: exp_result = gA ^ gB;
+                3'b101: exp_result = ~gA;
+
+                3'b110: begin
                     exp_result = gA << 1;
                     exp_carry  = gA[3];
                 end
-                3'b111: begin                    // SHR
+
+                3'b111: begin
                     exp_result = gA >> 1;
                     exp_carry  = gA[0];
                 end
-                default: exp_result = 4'b0000;
+
+                default: exp_result = 4'h0;
             endcase
 
-            exp_zero = (exp_result == 4'b0000);
+            exp_zero = (exp_result == 4'h0);
         end
     endtask
 
-    // ============================================================
-    // 6. CHECK TASK
-    //
-    //    Calls golden_model, compares to DUT outputs, updates
-    //    the scoreboard, and prints a message on any mismatch.
-    //    Also updates functional coverage flags.
-    // ============================================================
+    // Apply one vector, calculate the expected outputs and compare them.
     task automatic check_outputs (
-        input logic [3:0]  in_A,
-        input logic [3:0]  in_B,
-        input logic [2:0]  in_op,
-        input string       test_label   // e.g. "DT-001" or "RND"
+        input logic [3:0] in_A,
+        input logic [3:0] in_B,
+        input logic [2:0] in_op,
+        input string      test_label,
+        input bit         print_on_pass
     );
         logic [3:0] exp_r;
-        logic       exp_c, exp_z, exp_ov;
+        logic       exp_c;
+        logic       exp_z;
+        logic       exp_ov;
         begin
-            // --- Apply stimulus to DUT ---
             A  = in_A;
             B  = in_B;
             op = in_op;
-            #10; // Wait for combinational logic to settle (10 ns)
+            #10;
 
-            // --- Compute expected values ---
             golden_model(in_A, in_B, in_op, exp_r, exp_c, exp_z, exp_ov);
-
-            // --- Update scoreboard ---
             total_tests++;
 
-            // --- Update functional coverage ---
-            op_seen[in_op]  = 1'b1;
-            if (carry)    cov_carry_high    = 1'b1;
-            if (zero)     cov_zero_high     = 1'b1;
-            if (overflow) cov_overflow_high = 1'b1;
-            if (in_A == 4'h0) cov_A_zero   = 1'b1;
-            if (in_A == 4'hF) cov_A_ones   = 1'b1;
-            if (in_B == 4'h0) cov_B_zero   = 1'b1;
-            if (in_B == 4'hF) cov_B_ones   = 1'b1;
-            if (in_A == in_B) cov_A_eq_B   = 1'b1;
+            // Sample functional coverage after the DUT has settled.
+            op_seen[in_op] = 1'b1;
+            if (carry)              cov_carry_high    = 1'b1;
+            if (zero)               cov_zero_high     = 1'b1;
+            if (overflow)           cov_overflow_high = 1'b1;
+            if (in_A == 4'h0)       cov_A_zero        = 1'b1;
+            if (in_A == 4'hF)       cov_A_ones        = 1'b1;
+            if (in_B == 4'h0)       cov_B_zero        = 1'b1;
+            if (in_B == 4'hF)       cov_B_ones        = 1'b1;
+            if (in_A === in_B)      cov_A_eq_B        = 1'b1;
 
-            // --- Compare DUT output vs golden model ---
             if (result   !== exp_r  ||
                 carry    !== exp_c  ||
                 zero     !== exp_z  ||
-                overflow !== exp_ov)
-            begin
-                // ---- MISMATCH: print detailed debug info ----
+                overflow !== exp_ov) begin
+
                 $display("[FAIL] %-8s | op=%03b A=%0h B=%0h | DUT: res=%0h c=%0b z=%0b ov=%0b | EXP: res=%0h c=%0b z=%0b ov=%0b",
-                    test_label, in_op, in_A, in_B,
-                    result,   carry,   zero,   overflow,
-                    exp_r,    exp_c,   exp_z,  exp_ov);
+                         test_label, in_op, in_A, in_B,
+                         result, carry, zero, overflow,
+                         exp_r, exp_c, exp_z, exp_ov);
                 total_fail++;
-            end else begin
-                // ---- MATCH: only print for directed tests ----
-                if (test_label.substr(0,1) == "D")
+            end
+            else begin
+                if (print_on_pass)
                     $display("[PASS] %-8s | op=%03b A=%0h B=%0h -> result=%0h carry=%0b zero=%0b overflow=%0b",
-                        test_label, in_op, in_A, in_B, result, carry, zero, overflow);
+                             test_label, in_op, in_A, in_B,
+                             result, carry, zero, overflow);
                 total_pass++;
             end
         end
     endtask
 
-    // ============================================================
-    // 7. COVERAGE REPORT TASK
-    // ============================================================
-    task print_coverage_report;
+    function automatic bit coverage_complete;
+        begin
+            coverage_complete = (&op_seen)          &&
+                                cov_carry_high       &&
+                                cov_zero_high        &&
+                                cov_overflow_high    &&
+                                cov_A_zero           &&
+                                cov_A_ones           &&
+                                cov_B_zero           &&
+                                cov_B_ones           &&
+                                cov_A_eq_B;
+        end
+    endfunction
+
+    function automatic bit verification_passed;
+        begin
+            verification_passed = (total_fail == 0) &&
+                                  (assertion_fail_count == 0) &&
+                                  coverage_complete();
+        end
+    endfunction
+
+    task automatic print_coverage_report;
         int unsigned ops_hit;
         int unsigned i;
         begin
@@ -262,52 +246,43 @@ module alu_tb_selfcheck;
             $display("  B == 4h0        : %s", cov_B_zero ? "HIT" : "MISS ***");
             $display("  B == 4hF        : %s", cov_B_ones ? "HIT" : "MISS ***");
             $display("  A == B          : %s", cov_A_eq_B ? "HIT" : "MISS ***");
+            $display("----------------------------------------------");
+            $display("Coverage closure  : %s", coverage_complete() ? "PASS" : "FAIL");
             $display("==============================================");
         end
     endtask
 
-    // ============================================================
-    // 8. FINAL SUMMARY TASK
-    // ============================================================
-    task print_final_summary;
+    task automatic print_final_summary;
         begin
             $display("");
             $display("==============================================");
             $display("            SIMULATION SUMMARY               ");
             $display("==============================================");
-            $display("Total vectors   : %0d", total_tests);
-            $display("Passed          : %0d", total_pass);
-            $display("Failed          : %0d", total_fail);
+            $display("Total vectors       : %0d", total_tests);
+            $display("Scoreboard passed   : %0d", total_pass);
+            $display("Scoreboard failed   : %0d", total_fail);
+            $display("Assertion failures  : %0d", assertion_fail_count);
+            $display("Coverage closure    : %s", coverage_complete() ? "PASS" : "FAIL");
             $display("----------------------------------------------");
-            if (total_fail == 0)
-                $display(">>> ALL TESTS PASSED - DUT IS CORRECT <<<");
+            if (verification_passed())
+                $display(">>> ALL VERIFICATION CHECKS PASSED <<<");
             else
-                $display(">>> %0d FAILURE(S) FOUND - CHECK LOG ABOVE <<<", total_fail);
+                $display(">>> VERIFICATION FAILED - CHECK LOG ABOVE <<<");
             $display("==============================================");
         end
     endtask
 
-    // ============================================================
-    // 9. MAIN STIMULUS — INITIAL BLOCK
-    // ============================================================
-    initial begin
+    initial begin : main_stimulus
+        int unsigned a_value;
+        int unsigned b_value;
+        int unsigned op_value;
+        int unsigned directed_pass_before;
+        int unsigned directed_fail_before;
 
-        // Give DUT a defined starting state
         A  = 4'h0;
         B  = 4'h0;
         op = 3'b000;
         #5;
-
-        // ----------------------------------------------------------
-        // PHASE 1 : DIRECTED TESTS
-        //
-        //   Each test targets a specific requirement from the
-        //   Verification Plan.  The label "DT-NNN" maps back to the
-        //   VPlan table so each test is traceable to a requirement.
-        //
-        //   Test format:
-        //     check_outputs(A, B, op, label);
-        // ----------------------------------------------------------
 
         $display("");
         $display("==============================================");
@@ -316,136 +291,86 @@ module alu_tb_selfcheck;
         $display("");
         $display("--- PHASE 1: DIRECTED TESTS ---");
 
-        // ---- ADD operation ----
-        // DT-001: Simple addition, no flags
-        check_outputs(4'h3, 4'h5, 3'b000, "DT-001");
-        // DT-002: ADD causing carry out  (0xF + 0x1 = 0x10 -> result=0, carry=1, zero=1)
-        check_outputs(4'hF, 4'h1, 3'b000, "DT-002");
-        // DT-003: ADD causing signed overflow (7 + 1 = 8; in 4-bit signed: 7+1 wraps to -8)
-        check_outputs(4'h7, 4'h1, 3'b000, "DT-003");
-        // DT-004: ADD with A=0
-        check_outputs(4'h0, 4'h5, 3'b000, "DT-004");
-        // DT-005: ADD both zero -> zero flag
-        check_outputs(4'h0, 4'h0, 3'b000, "DT-005");
-        // DT-006: ADD both max -> double carry + zero
-        check_outputs(4'hF, 4'hF, 3'b000, "DT-006");
+        directed_pass_before = total_pass;
+        directed_fail_before = total_fail;
 
-        // ---- SUB operation ----
-        // DT-007: Normal subtraction
-        check_outputs(4'h8, 4'h3, 3'b001, "DT-007");
-        // DT-008: SUB with borrow (0 - 1 = borrow, result = 0xF)
-        check_outputs(4'h0, 4'h1, 3'b001, "DT-008");
-        // DT-009: A == B -> zero result
-        check_outputs(4'h5, 4'h5, 3'b001, "DT-009");
-        // DT-010: Signed overflow: -8 - 1 = -9 (cannot represent, overflow)
-        check_outputs(4'h8, 4'h1, 3'b001, "DT-010");
+        // ADD
+        check_outputs(4'h3, 4'h5, 3'b000, "DT-001", 1'b1);
+        check_outputs(4'hF, 4'h1, 3'b000, "DT-002", 1'b1);
+        check_outputs(4'h7, 4'h1, 3'b000, "DT-003", 1'b1);
+        check_outputs(4'h0, 4'h5, 3'b000, "DT-004", 1'b1);
+        check_outputs(4'h0, 4'h0, 3'b000, "DT-005", 1'b1);
+        // 0xF + 0xF = 0x1E -> result=E, carry=1, zero=0.
+        check_outputs(4'hF, 4'hF, 3'b000, "DT-006", 1'b1);
 
-        // ---- AND operation ----
-        // DT-011: AND of complementary values -> zero
-        check_outputs(4'h5, 4'hA, 3'b010, "DT-011");
-        // DT-012: AND all ones -> A
-        check_outputs(4'h7, 4'hF, 3'b010, "DT-012");
-        // DT-013: AND with zero -> zero
-        check_outputs(4'hF, 4'h0, 3'b010, "DT-013");
+        // SUB
+        // Use 7 - 3 as a basic non-overflow subtraction.
+        check_outputs(4'h7, 4'h3, 3'b001, "DT-007", 1'b1);
+        check_outputs(4'h0, 4'h1, 3'b001, "DT-008", 1'b1);
+        check_outputs(4'h5, 4'h5, 3'b001, "DT-009", 1'b1);
+        check_outputs(4'h8, 4'h1, 3'b001, "DT-010", 1'b1);
 
-        // ---- OR operation ----
-        // DT-014: OR of complementary -> all ones
-        check_outputs(4'h5, 4'hA, 3'b011, "DT-014");
-        // DT-015: OR with zero -> A
-        check_outputs(4'h7, 4'h0, 3'b011, "DT-015");
+        // AND
+        check_outputs(4'h5, 4'hA, 3'b010, "DT-011", 1'b1);
+        check_outputs(4'h7, 4'hF, 3'b010, "DT-012", 1'b1);
+        check_outputs(4'hF, 4'h0, 3'b010, "DT-013", 1'b1);
 
-        // ---- XOR operation ----
-        // DT-016: XOR same values -> zero
-        check_outputs(4'h9, 4'h9, 3'b100, "DT-016");
-        // DT-017: XOR complementary -> all ones
-        check_outputs(4'h5, 4'hA, 3'b100, "DT-017");
+        // OR
+        check_outputs(4'h5, 4'hA, 3'b011, "DT-014", 1'b1);
+        check_outputs(4'h7, 4'h0, 3'b011, "DT-015", 1'b1);
 
-        // ---- NOT operation ----
-        // DT-018: NOT of zero -> all ones
-        check_outputs(4'h0, 4'hX, 3'b101, "DT-018");
-        // DT-019: NOT of all ones -> zero
-        check_outputs(4'hF, 4'hX, 3'b101, "DT-019");
-        // DT-020: NOT of mixed pattern
-        check_outputs(4'hA, 4'hX, 3'b101, "DT-020");
+        // XOR
+        check_outputs(4'h9, 4'h9, 3'b100, "DT-016", 1'b1);
+        check_outputs(4'h5, 4'hA, 3'b100, "DT-017", 1'b1);
 
-        // ---- SHL operation ----
-        // DT-021: SHL with MSB=1 -> carry=1, result shifts, MSB lost
-        check_outputs(4'h8, 4'hX, 3'b110, "DT-021");
-        // DT-022: SHL normal
-        check_outputs(4'h3, 4'hX, 3'b110, "DT-022");
-        // DT-023: SHL all ones -> carry=1, result=0xE
-        check_outputs(4'hF, 4'hX, 3'b110, "DT-023");
+        // NOT: B is deliberately X because this operation must ignore B.
+        check_outputs(4'h0, 4'hX, 3'b101, "DT-018", 1'b1);
+        check_outputs(4'hF, 4'hX, 3'b101, "DT-019", 1'b1);
+        check_outputs(4'hA, 4'hX, 3'b101, "DT-020", 1'b1);
 
-        // ---- SHR operation ----
-        // DT-024: SHR with LSB=1 -> carry=1, result shifts
-        check_outputs(4'h1, 4'hX, 3'b111, "DT-024");
-        // DT-025: SHR normal
-        check_outputs(4'hA, 4'hX, 3'b111, "DT-025");
-        // DT-026: SHR all ones -> carry=1, result=0x7
-        check_outputs(4'hF, 4'hX, 3'b111, "DT-026");
+        // SHL: B is deliberately X because this operation must ignore B.
+        check_outputs(4'h8, 4'hX, 3'b110, "DT-021", 1'b1);
+        check_outputs(4'h3, 4'hX, 3'b110, "DT-022", 1'b1);
+        check_outputs(4'hF, 4'hX, 3'b110, "DT-023", 1'b1);
 
-        $display("Phase 1 complete: %0d passed, %0d failed", total_pass, total_fail);
+        // SHR: B is deliberately X because this operation must ignore B.
+        check_outputs(4'h1, 4'hX, 3'b111, "DT-024", 1'b1);
+        check_outputs(4'hA, 4'hX, 3'b111, "DT-025", 1'b1);
+        check_outputs(4'hF, 4'hX, 3'b111, "DT-026", 1'b1);
 
-        // ----------------------------------------------------------
-        // PHASE 2 : RANDOMIZED TESTS
-        //
-        //   10,000 random {A, B, op} combinations.
-        //   Each vector is compared to the golden model.
-        //   A fixed seed makes results repeatable across runs.
-        //   Change the seed to explore different stimulus sequences.
-        // ----------------------------------------------------------
+        $display("Phase 1 complete: %0d passed, %0d failed",
+                 total_pass - directed_pass_before,
+                 total_fail - directed_fail_before);
 
+        // The complete valid input space is small:
+        // 16 values of A x 16 values of B x 8 opcodes = 2,048 vectors.
         $display("");
-        $display("--- PHASE 2: RANDOMIZED TESTS (10,000 vectors, seed=42) ---");
+        $display("--- PHASE 2: EXHAUSTIVE TESTS (2,048 vectors) ---");
 
-        begin : random_phase
-            // Declare loop variables at block level for compatibility
-            int unsigned i;
-            int unsigned rand_seed;
-            logic [3:0]  rand_A;
-            logic [3:0]  rand_B;
-            logic [2:0]  rand_op;
-
-            rand_seed = 42;
-
-            for (i = 0; i < 10000; i++) begin
-                // Simple LCG (Linear Congruential Generator)
-                // for deterministic pseudo-random sequences.
-                // srandom() is also valid in SV but LCG is more portable.
-                rand_seed = rand_seed * 1664525 + 1013904223;
-                rand_A    = rand_seed[3:0];
-
-                rand_seed = rand_seed * 1664525 + 1013904223;
-                rand_B    = rand_seed[3:0];
-
-                rand_seed = rand_seed * 1664525 + 1013904223;
-                rand_op   = rand_seed[2:0];
-
-                check_outputs(rand_A, rand_B, rand_op, "RND");
+        for (op_value = 0; op_value < 8; op_value++) begin
+            for (a_value = 0; a_value < 16; a_value++) begin
+                for (b_value = 0; b_value < 16; b_value++) begin
+                    check_outputs(a_value, b_value, op_value, "EXH", 1'b0);
+                end
             end
         end
 
         $display("Phase 2 complete: %0d total passed, %0d total failed",
                  total_pass, total_fail);
 
-        // ----------------------------------------------------------
-        // PHASE 3 : REPORTS
-        // ----------------------------------------------------------
         print_coverage_report;
         print_final_summary;
 
-        $finish;
+        if (verification_passed())
+            $finish;
+        else
+            $fatal(1, "ALU verification failed.");
     end
 
-    // ============================================================
-    // 10. SIMULATION TIMEOUT (safety net)
-    //     Prevents a hung simulation from running forever.
-    //     50 ms is far more than enough for combinational logic.
-    // ============================================================
-    initial begin
-        #50_000_000;
-        $display("[TIMEOUT] Simulation exceeded 50 ms - forcing stop.");
-        $finish;
+    // Safety net. The exhaustive simulation should finish around 21 us.
+    initial begin : timeout_watchdog
+        #1_000_000; // 1 ms
+        $fatal(1, "[TIMEOUT] Simulation exceeded 1 ms.");
     end
 
 endmodule
